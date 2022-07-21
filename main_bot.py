@@ -41,6 +41,15 @@ async def add_task_command(message: types.Message):
 	await FSMdata.name.set()
 	await message.answer('Введите название задачи:')
 
+
+@dp.message_handler(commands='cancel', state="*")
+async def cancel_handler(message: types.Message, state: FSMContext):
+	current_state = await state.get_state()
+	if current_state is None:
+		return
+	await state.finish()
+	await message.answer('Действие отменено')
+
 @dp.message_handler(state=FSMdata.name)
 async def set_name(message: types.Message, state: FSMContext):
 	async with state.proxy() as data:
@@ -56,14 +65,6 @@ async def set_description(message: types.Message, state: FSMContext):
 	async with state.proxy() as data:
 		await message.answer(str(data))
 	await state.finish()
-
-@dp.message_handler(state="*", commands='cancel')
-async def cancel_handler(message: types.Message, state: FSMContext):
-	current_state = await state.get_state()
-	if current_state is None:
-		return
-	await state.finish()
-	await message.answer('Действие отменено')
 
 
 # поллинг
