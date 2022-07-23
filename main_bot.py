@@ -1,4 +1,3 @@
-from os import curdir
 from config import TOKEN
 from aiogram import Bot, Dispatcher, types, executor
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -8,7 +7,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram import types
 import sqlite3 as sq
 
-
+# функция при старте
 async def on_startup(_):
 	print('Bot online')
 	sql_start()
@@ -25,13 +24,8 @@ def sql_start():
 	global base, cur
 	base = sq.connect('database.db')
 	cur = base.cursor()
-	base.execute('CREATE TABLE IF NOT EXISTS menu(id TEXT PRIMARY KEY, name TEXT, description TEXT)')
+	base.execute('CREATE TABLE IF NOT EXISTS {}(id TEXT PRIMARY KEY, name TEXT, description TEXT)'.format('data'))
 	base.commit()
-
-async def sql_add_command(state):
-	async with state.proxy() as data:
-		cur.execute('INSERT INTO menu VALUES (?)', tuple(data.values()))
-		base.commit()
 
 # инициализация бота
 bot = Bot(token=TOKEN)
@@ -74,10 +68,10 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 async def set_name(message: types.Message, state: FSMContext):
 	async with state.proxy() as data:
 		data['name'] = message.text
-	await sql_add_command(state)
+	###
 	await message.answer('Задача успешно добавлена ✅')
 	await state.finish()
 
 # поллинг
 if __name__ == '__main__':
-  executor.start_polling(dp,skip_updates=True)
+  executor.start_polling(dp,skip_updates=True, on_startup=on_startup)
