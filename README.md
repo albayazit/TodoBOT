@@ -1,3 +1,3 @@
-# TodoBOT for telegram with aiogram and work with git
+# TodoBOT for telegram with aiogram
 
 Simple telegram bot with aiogram
