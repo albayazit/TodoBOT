@@ -54,10 +54,17 @@ async def start_command(message : types.Message):
 
 # отображения задач
 def tasks_markup(user_id):
+	task = 0
 	markup_tasks = InlineKeyboardMarkup()
 	for item in cur.execute(f'SELECT name FROM data WHERE user_id == {user_id}').fetchall():
-		markup_tasks.add(InlineKeyboardButton(item[0], callback_data=str(user_id)+item[0]))
+		task += 1
+		markup_tasks.add(InlineKeyboardButton(item[0], callback_data=task))
 	return markup_tasks
+
+
+# отображение описания
+# def tasks_desc(user_id, current_task):
+# 	markup_desc = InlineKeyboardMarkup
 
 
 # кнопка список задач
@@ -66,8 +73,14 @@ async def tasks_command(message : types.Message):
 	user_id = message.from_user.id
 	await message.answer('Задачи:', reply_markup=tasks_markup(user_id))
 
-
-
+# описание к задаче
+@dp.callback_query_handler(text=range(1000))
+async def task_description(callback: types.CallbackQuery):
+	user_id = callback.from_user.id
+	current_task = callback.data
+	text = cur.execute(f'SELECT description FROM data WHERE user_id == {user_id} AND task_id == {current_task}').fetchone()
+	await callback.message.answer(text[0])
+	await callback.answer()
 
 # кнопка добавить задачу
 @dp.message_handler(lambda message: message.text == "✏ Добавить задачу", state=None)
