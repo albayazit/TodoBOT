@@ -1,3 +1,4 @@
+from ast import parse
 from email import message
 from email.errors import MissingHeaderBodySeparatorDefect
 from faulthandler import cancel_dump_traceback_later
@@ -37,7 +38,7 @@ def sql_start():
 
 
 # инициализация бота
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, parse_mode=types.ParseMode.HTML)
 dp = Dispatcher(bot, storage=storage)
 
 
@@ -50,17 +51,18 @@ markup_tasks= InlineKeyboardMarkup()
 delete_btn = InlineKeyboardButton('Удалить', callback_data='delete')
 edit_btn = InlineKeyboardButton('Изменить описание', callback_data='edit')
 desc_inline = InlineKeyboardMarkup().insert(delete_btn).insert(edit_btn)
+desc_message = ''
 
 # кнопка старт
 @dp.message_handler(commands="start")
 async def start_command(message : types.Message):
-	await message.answer('Привет! Вот что я умею:', reply_markup=markup_main)
+	await message.answer('<b>Hi!</b>', reply_markup=markup_main)
 
 
 # кнопка помощь
 @dp.message_handler(commands="help")
 async def help_command(message : types.Message):
-	await message.answer('Бот предназначен для отслеживания ежедневных задач, добавления описания к ним. Выберите раздел:', reply_markup=markup_main)
+	await message.answer('The bot is designed to track daily tasks and add descriptions to them.\n<b>Select a section:</b>', reply_markup=markup_main)
 
 
 # отображения задач
@@ -74,10 +76,10 @@ def tasks_markup(user_id):
 
 
 # кнопка список задач
-@dp.message_handler(lambda message: message.text == "📋 Задачи")
+@dp.message_handler(lambda message: message.text == "📋 Задачи", commands='tasks')
 async def tasks_command(message : types.Message):
 	user_id = message.from_user.id
-	await message.answer('Задачи:', reply_markup=tasks_markup(user_id))
+	await message.answer('<b>Tasks:</b>', reply_markup=tasks_markup(user_id))
 
 
 # описание к задаче
@@ -99,13 +101,36 @@ async def task_delete(callback: types.CallbackQuery):
 	base.commit()
 	for item in cur.execute(f'SELECT task_id FROM data WHERE user_id == {user_id}').fetchall():
 		task += 1
-		cur.execute('UPDATE data SET task_id = ? WHERE user_id == ? AND task_id == ?', (task, user_id, item[0]))
-		base.commit()	
-	await callback.message.answer('Задача успешно удалена ✅')
+		try:
+			cur.execute('UPDATE data SET task_id = ? WHERE user_id == ? AND task_id == ?', (task, user_id, item[0]))
+			base.commit()
+			await callback.message.edit_text('Задача успешно удалена ✅')
+		except:
+			await callback.message.edit_text('Ой, что-то пошло не так! Повторите еще раз!', reply_markup=markup_main)
 	await callback.answer()
 
+
+# изменение описания
+@dp.callback_query_handler(text='edit', state=None)
+async def task_edit(callback : types.CallbackQuery):
+	await FSMdata.description.set()
+	await callback.message.answer('Введите описание к задаче:')
+	await callback.answer()
+
+@dp.message_handler(state=FSMdata.description)
+async def set_desc(message: types.Message, state: FSMContext):
+	user_id = message.from_user.id
+	try:
+		cur.execute('UPDATE data SET description = ? WHERE user_id = ? AND task_id = ?', (str(message.text), user_id, current_task))
+		base.commit()
+		await message.answer('Описание успешно добавлено ✅', reply_markup=markup_main)
+	except:
+		await message.answer('Ой, что-то пошло не так! Повторите еще раз!', reply_markup=markup_main)
+	await state.finish()
+
+
 # кнопка добавить задачу
-@dp.message_handler(lambda message: message.text == "✏ Добавить задачу", state=None)
+@dp.message_handler(lambda message: message.text == "✏ Добавить задачу",state=None)
 async def add_task_command(message: types.Message):
 	await FSMdata.name.set()
 	await message.answer('Введите название задачи:')
@@ -126,9 +151,12 @@ async def set_name(message: types.Message, state: FSMContext):
 	task = 0
 	for item in cur.execute(f'SELECT task_id FROM data WHERE user_id == {user_id}').fetchall():
 		task += 1
-	cur.execute('INSERT INTO data VALUES (?, ?, ?, ?)', (str(task+1), user_id, str(message.text), 'Описание отсутствует'))
-	base.commit()
-	await message.answer('Задача успешно добавлена ✅', reply_markup=markup_main)
+	try:
+		cur.execute('INSERT INTO data VALUES (?, ?, ?, ?)', (str(task+1), user_id, str(message.text), 'Описание отсутствует'))
+		base.commit()
+		await message.answer('Задача успешно добавлена ✅', reply_markup=markup_main)
+	except:
+		await message.answer('Ой, что-то пошло не так! Повторите еще раз!', reply_markup=markup_main)
 	await state.finish()
 
 
