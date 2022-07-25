@@ -2,6 +2,7 @@ from ast import parse
 from email import message
 from email.errors import MissingHeaderBodySeparatorDefect
 from faulthandler import cancel_dump_traceback_later
+from time import sleep
 from config import TOKEN
 from aiogram import Bot, Dispatcher, types, executor
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -45,9 +46,8 @@ dp = Dispatcher(bot, storage=storage)
 # основные переменные
 tasks_button = KeyboardButton('📋 Задачи')
 add_task = KeyboardButton('✏ Добавить задачу')
-markup_main = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+markup_main = ReplyKeyboardMarkup(resize_keyboard=True)
 markup_main.add(tasks_button).add(add_task)
-markup_tasks= InlineKeyboardMarkup()
 delete_btn = InlineKeyboardButton('Удалить', callback_data='delete')
 edit_btn = InlineKeyboardButton('Изменить описание', callback_data='edit')
 desc_inline = InlineKeyboardMarkup().insert(delete_btn).insert(edit_btn)
@@ -66,11 +66,11 @@ async def help_command(message : types.Message):
 
 # отображения задач
 def tasks_markup(user_id):
-	markup_tasks = InlineKeyboardMarkup()
+	markup_tasks = InlineKeyboardMarkup(row_width=2, KeyboardButton=False)
 	task = 0
-	for item in cur.execute(f'SELECT name FROM data WHERE user_id == {user_id}').fetchall():
+	for item in cur.execute(f'SELECT name FROM data WHERE user_id == {user_id}', ).fetchall():
 		task += 1
-		markup_tasks.add(InlineKeyboardButton(item[0], callback_data=str(task)))
+		markup_tasks.insert(InlineKeyboardButton(item[0], callback_data=str(task)))
 	return markup_tasks
 
 
@@ -80,25 +80,35 @@ async def tasks_command(message : types.Message):
 	user_id = message.from_user.id
 	await message.answer('<b>Задачи:</b>', reply_markup=tasks_markup(user_id))
 
-
 # описание к задаче
 @dp.callback_query_handler(text=range(1000))
 async def task_description(callback: types.CallbackQuery):
 	user_id = callback.from_user.id
 	global current_task
 	current_task = callback.data
-	name = cur.execute('SELECT name FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task)).fetchone()
-	task_name = f'Задача: <b>{name[0]}</b>\n'
-	text = cur.execute(f'SELECT description FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task)).fetchone()
-	await callback.message.edit_text(task_name + text[0], reply_markup=desc_inline)
-	await callback.answer()
+	check = cur.execute(f'SELECT task_id FROM data WHERE user_id == {user_id}').fetchall()
+	inmas = False
+	for i in check:
+		if current_task == i[0]:
+			inmas = True
+		else:
+			inmas = False
+	if inmas == True:
+		name = cur.execute('SELECT name FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task)).fetchone()
+		task_name = f'Задача: <b>{name[0]}</b>\n'
+		text = cur.execute(f'SELECT description FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task)).fetchone()
+		await callback.message.edit_text(task_name + text[0], reply_markup=desc_inline)
+	else:
+			await callback.message.answer('Задача удалена.', reply_markup=markup_main)
+			await callback.answer()
+
 
 # удаление задачи
 @dp.callback_query_handler(text='delete')
 async def task_delete(callback: types.CallbackQuery):
 	user_id = callback.from_user.id
 	task = 0
-	cur.execute(f'DELETE FROM data WHERE user_id == {user_id} AND task_id == {current_task}')
+	cur.execute(f'DELETE FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task))
 	base.commit()
 	for item in cur.execute(f'SELECT task_id FROM data WHERE user_id == {user_id}').fetchall():
 		task += 1
@@ -121,12 +131,9 @@ async def task_edit(callback : types.CallbackQuery):
 @dp.message_handler(state=FSMdata.description)
 async def set_desc(message: types.Message, state: FSMContext):
 	user_id = message.from_user.id
-	try:
-		cur.execute('UPDATE data SET description = ? WHERE user_id = ? AND task_id = ?', (str(message.text), user_id, current_task))
-		base.commit()
-		await message.edit_text('Описание успешно изменено ✅', reply_markup=markup_main)
-	except:
-		await message.answer('Ой, что-то пошло не так! Повторите еще раз!', reply_markup=markup_main)
+	cur.execute('UPDATE data SET description = ? WHERE user_id = ? AND task_id = ?', (str(message.text), user_id, current_task))
+	base.commit()
+	await message.edit_text('Описание успешно изменено ✅', reply_markup=markup_main)
 	await state.finish()
 
 
@@ -134,7 +141,7 @@ async def set_desc(message: types.Message, state: FSMContext):
 @dp.message_handler(lambda message: message.text == "✏ Добавить задачу",state=None)
 async def add_task_command(message: types.Message):
 	await FSMdata.name.set()
-	await message.answer('Введите название задачи:')
+	await message.answer('Введите название задачи:', reply_markup=types.ReplyKeyboardRemove())
 
 # отмена FSM
 @dp.message_handler(commands='cancel', state="*")
@@ -159,6 +166,11 @@ async def set_name(message: types.Message, state: FSMContext):
 	except:
 		await message.answer('Ой, что-то пошло не так! Повторите еще раз!', reply_markup=markup_main)
 	await state.finish()
+
+# реакция на остальные сообщения
+@dp.message_handler()
+async def unknown_command(message : types.Message):
+	await message.answer('Я тебя не понимаю.\n<b>Выберите раздел:</b>', reply_markup=markup_main)
 
 
 # поллинг
