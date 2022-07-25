@@ -66,7 +66,7 @@ async def help_command(message : types.Message):
 
 # отображения задач
 def tasks_markup(user_id):
-	markup_tasks = InlineKeyboardMarkup(row_width=2, KeyboardButton=False)
+	markup_tasks = InlineKeyboardMarkup(row_width=2)
 	task = 0
 	for item in cur.execute(f'SELECT name FROM data WHERE user_id == {user_id}', ).fetchall():
 		task += 1
@@ -91,6 +91,7 @@ async def task_description(callback: types.CallbackQuery):
 	for i in check:
 		if current_task == i[0]:
 			inmas = True
+			break
 		else:
 			inmas = False
 	if inmas == True:
