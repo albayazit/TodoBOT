@@ -51,18 +51,17 @@ markup_tasks= InlineKeyboardMarkup()
 delete_btn = InlineKeyboardButton('Удалить', callback_data='delete')
 edit_btn = InlineKeyboardButton('Изменить описание', callback_data='edit')
 desc_inline = InlineKeyboardMarkup().insert(delete_btn).insert(edit_btn)
-desc_message = ''
 
 # кнопка старт
 @dp.message_handler(commands="start")
 async def start_command(message : types.Message):
-	await message.answer('<b>Hi!</b>', reply_markup=markup_main)
+	await message.answer('<b>Привет!</b>', reply_markup=markup_main)
 
 
 # кнопка помощь
 @dp.message_handler(commands="help")
 async def help_command(message : types.Message):
-	await message.answer('The bot is designed to track daily tasks and add descriptions to them.\n<b>Select a section:</b>', reply_markup=markup_main)
+	await message.answer('Бот предназначен для отслеживания ваших задач!\n<b>Выберите раздел:</b>', reply_markup=markup_main)
 
 
 # отображения задач
@@ -76,10 +75,10 @@ def tasks_markup(user_id):
 
 
 # кнопка список задач
-@dp.message_handler(lambda message: message.text == "📋 Задачи", commands='tasks')
+@dp.message_handler(lambda message: message.text == "📋 Задачи")
 async def tasks_command(message : types.Message):
 	user_id = message.from_user.id
-	await message.answer('<b>Tasks:</b>', reply_markup=tasks_markup(user_id))
+	await message.answer('<b>Задачи:</b>', reply_markup=tasks_markup(user_id))
 
 
 # описание к задаче
@@ -88,8 +87,10 @@ async def task_description(callback: types.CallbackQuery):
 	user_id = callback.from_user.id
 	global current_task
 	current_task = callback.data
-	text = cur.execute(f'SELECT description FROM data WHERE user_id == {user_id} AND task_id == {current_task}').fetchone()
-	await callback.message.edit_text(text[0], reply_markup=desc_inline)
+	name = cur.execute('SELECT name FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task)).fetchone()
+	task_name = f'Задача: <b>{name[0]}</b>\n'
+	text = cur.execute(f'SELECT description FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task)).fetchone()
+	await callback.message.edit_text(task_name + text[0], reply_markup=desc_inline)
 	await callback.answer()
 
 # удаление задачи
@@ -104,9 +105,9 @@ async def task_delete(callback: types.CallbackQuery):
 		try:
 			cur.execute('UPDATE data SET task_id = ? WHERE user_id == ? AND task_id == ?', (task, user_id, item[0]))
 			base.commit()
-			await callback.message.edit_text('Задача успешно удалена ✅')
 		except:
 			await callback.message.edit_text('Ой, что-то пошло не так! Повторите еще раз!', reply_markup=markup_main)
+	await callback.message.edit_text('Задача успешно удалена ✅')
 	await callback.answer()
 
 
@@ -114,7 +115,7 @@ async def task_delete(callback: types.CallbackQuery):
 @dp.callback_query_handler(text='edit', state=None)
 async def task_edit(callback : types.CallbackQuery):
 	await FSMdata.description.set()
-	await callback.message.answer('Введите описание к задаче:')
+	await callback.message.answer('Введите новое описание:')
 	await callback.answer()
 
 @dp.message_handler(state=FSMdata.description)
@@ -123,7 +124,7 @@ async def set_desc(message: types.Message, state: FSMContext):
 	try:
 		cur.execute('UPDATE data SET description = ? WHERE user_id = ? AND task_id = ?', (str(message.text), user_id, current_task))
 		base.commit()
-		await message.answer('Описание успешно добавлено ✅', reply_markup=markup_main)
+		await message.edit_text('Описание успешно изменено ✅', reply_markup=markup_main)
 	except:
 		await message.answer('Ой, что-то пошло не так! Повторите еще раз!', reply_markup=markup_main)
 	await state.finish()
@@ -142,7 +143,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 	if current_state is None:
 		return
 	await state.finish()
-	await message.answer('Действие отменено ❌')
+	await message.edit_text('Действие отменено ❌')
 
 # добавление новой задачи
 @dp.message_handler(state=FSMdata.name)
