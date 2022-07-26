@@ -1,16 +1,9 @@
-from ast import parse
-from email import message
-from email.errors import MissingHeaderBodySeparatorDefect
-from faulthandler import cancel_dump_traceback_later
-from tabnanny import check
-from time import sleep
 from config import TOKEN
 from aiogram import Bot, Dispatcher, types, executor
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram import types
 import sqlite3 as sq
 
 # функция при старте
