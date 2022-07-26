@@ -2,6 +2,7 @@ from ast import parse
 from email import message
 from email.errors import MissingHeaderBodySeparatorDefect
 from faulthandler import cancel_dump_traceback_later
+from tabnanny import check
 from time import sleep
 from config import TOKEN
 from aiogram import Bot, Dispatcher, types, executor
@@ -51,6 +52,10 @@ markup_main.add(tasks_button).add(add_task)
 delete_btn = InlineKeyboardButton('Удалить', callback_data='delete')
 edit_btn = InlineKeyboardButton('Изменить описание', callback_data='edit')
 desc_inline = InlineKeyboardMarkup().insert(delete_btn).insert(edit_btn)
+next_btn = InlineKeyboardButton('»', callback_data='next_btn')
+back_btn = InlineKeyboardButton('«', callback_data='back_btn')
+global page
+page = 1
 
 # кнопка старт
 @dp.message_handler(commands="start")
@@ -65,20 +70,58 @@ async def help_command(message : types.Message):
 
 
 # отображения задач
-def tasks_markup(user_id):
+def tasks_markup(user_id, page):
 	markup_tasks = InlineKeyboardMarkup(row_width=2)
-	task = 0
-	for item in cur.execute(f'SELECT name FROM data WHERE user_id == {user_id}', ).fetchall():
-		task += 1
-		markup_tasks.insert(InlineKeyboardButton(item[0], callback_data=str(task)))
+	items = page * 10
+	count = 0
+	check = cur.execute(f'SELECT name FROM data WHERE user_id == {user_id}').fetchall()
+	x = 0
+	for j in check:
+		x += 1
+	for item in range(items-10, items):
+		for i in cur.execute(f'SELECT name FROM data WHERE user_id == {user_id} AND task_id == {item}').fetchall():
+			count += 1
+			markup_tasks.insert(InlineKeyboardButton(i[0], callback_data=str(item)))
+	if count == 10 and page == 1 and x > 10:
+		markup_tasks.add(next_btn)
+	elif count % 10 == 0 and page != 1:
+		markup_tasks.add(back_btn)
+		markup_tasks.insert(next_btn)
+	elif count % 10 != 0 and page != 1:
+		markup_tasks.add(back_btn)
+
+	# elif page == 1 and last_page == False and count == 10:
+	# 	markup_tasks.add(next_btn)
+	# elif last_page == False and page != 1:
+	# 	markup_tasks.insert(back_btn)
+	# 	markup_tasks.insert(next_btn)
+	# elif last_page == True:
+	# 	markup_tasks.add(back_btn)
 	return markup_tasks
 
+@dp.callback_query_handler(text = 'next_btn')
+async def next_cmd(callback: types.CallbackQuery):
+	user_id = callback.from_user.id
+	global page
+	page += 1
+	await callback.message.edit_text('■□■□■□■□■□ <b>TASKS</b> □■□■□■□■□■', reply_markup=tasks_markup(user_id, page))
+	await callback.answer()
+
+@dp.callback_query_handler(text = 'back_btn')
+async def back_cmd(callback: types.CallbackQuery):
+	user_id = callback.from_user.id
+	global page
+	page -= 1
+	await callback.message.edit_text('■□■□■□■□■□ <b>TASKS</b> □■□■□■□■□■', reply_markup=tasks_markup(user_id, page))
+	await callback.answer()
 
 # кнопка список задач
-@dp.message_handler(lambda message: message.text == "📋 Задачи")
+@dp.message_handler(lambda message: message.text == "📋 Задачи") 
 async def tasks_command(message : types.Message):
+	global page
+	page = 1
 	user_id = message.from_user.id
-	await message.answer('<b>Задачи:</b>', reply_markup=tasks_markup(user_id))
+	await message.answer('■□■□■□■□■□ <b>TASKS</b> □■□■□■□■□■', reply_markup=tasks_markup(user_id, page))
 
 # описание к задаче
 @dp.callback_query_handler(text=range(1000))
@@ -108,7 +151,7 @@ async def task_description(callback: types.CallbackQuery):
 @dp.callback_query_handler(text='delete')
 async def task_delete(callback: types.CallbackQuery):
 	user_id = callback.from_user.id
-	task = 0
+	task = -1
 	cur.execute(f'DELETE FROM data WHERE user_id == ? AND task_id == ?', (user_id, current_task))
 	base.commit()
 	for item in cur.execute(f'SELECT task_id FROM data WHERE user_id == {user_id}').fetchall():
@@ -134,7 +177,7 @@ async def set_desc(message: types.Message, state: FSMContext):
 	user_id = message.from_user.id
 	cur.execute('UPDATE data SET description = ? WHERE user_id = ? AND task_id = ?', (str(message.text), user_id, current_task))
 	base.commit()
-	await message.edit_text('Описание успешно изменено ✅', reply_markup=markup_main)
+	await message.answer('Описание успешно изменено ✅', reply_markup=markup_main)
 	await state.finish()
 
 
@@ -157,7 +200,7 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 @dp.message_handler(state=FSMdata.name)
 async def set_name(message: types.Message, state: FSMContext):
 	user_id = message.from_user.id
-	task = 0
+	task = -1
 	for item in cur.execute(f'SELECT task_id FROM data WHERE user_id == {user_id}').fetchall():
 		task += 1
 	try:
